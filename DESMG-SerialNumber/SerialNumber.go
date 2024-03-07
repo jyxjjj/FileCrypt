@@ -125,9 +125,20 @@ func GetSerialNumber() string {
 		Serial = 0
 	}
 	LastSerialTime = diff
-	ID := diff<<22 | MachineID<<12 | Serial
+	ID := 3<<60 | diff<<20 | MachineID<<12 | Serial
 	if Verbose == true {
-		log.Printf("| %d %d %d | %X(%d) %d(%d)", diff, MachineID, Serial, ID, len(fmt.Sprintf("%X", ID)), ID, len(fmt.Sprintf("%d", ID)))
+		bin := strconv.FormatInt(ID, 2)
+		if len(bin) < 64 {
+			for i := 0; i < 64-len(bin); i++ {
+				bin = "0" + bin
+			}
+		}
+		bin = bin[:1] + " " + bin[1:]
+		bin = bin[:4] + " " + bin[4:]
+		bin = bin[:45] + " " + bin[45:]
+		bin = bin[:54] + " " + bin[54:]
+		log.Printf("| %16d %4d %4d | %72s %32X(%d) %32d(%d)", diff, MachineID, Serial, bin, ID, len(fmt.Sprintf("%X", ID)), ID, len(fmt.Sprintf("%d", ID)))
 	}
-	return fmt.Sprintf("%X", ID)
+	SN := fmt.Sprintf("%X", ID)
+	return SN
 }
