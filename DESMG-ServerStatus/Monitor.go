@@ -2,88 +2,17 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
-
-func main() {
-	jsonData := run()
-	send(jsonData)
-}
-
-func send(jsonData string) {
-	url := os.Getenv("SERVER_URL")
-	if url == "" {
-		println("SERVER_URL has not been set")
-		return
-	}
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(jsonData)))
-	if err != nil {
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	_, err2 := client.Do(req)
-	if err2 != nil {
-		return
-	}
-}
-
-type JSONData struct {
-	DeviceID   string `json:"DeviceID"`
-	CPUModel   string `json:"CPUModel"`
-	CPUNum     int64  `json:"CPUNum"`
-	CPUFreq    string `json:"CPUFreq"`
-	CPUUsage   int64  `json:"CPUUsage"`
-	OSName     string `json:"OSName"`
-	MemSize    string `json:"MemSize"`
-	MemUsed    int64  `json:"MemUsed"`
-	NumProcess int64  `json:"NumProcess"`
-	DiskName   string `json:"DiskName"`
-	DiskUsage  int64  `json:"DiskUsage"`
-	DiskSize   string `json:"DiskSize"`
-	Uptime     string `json:"Uptime"`
-	IORead     int64  `json:"IORead"`
-	IOWrite    int64  `json:"IOWrite"`
-}
-
-func run() string {
-	iorw := GetIORW()
-	data := JSONData{
-		DeviceID:   GetDeviceID(),
-		CPUModel:   GetCPUModel(),
-		CPUNum:     GetCPUNum(),
-		CPUFreq:    GetCPUFreq(),
-		CPUUsage:   GetCPUUsage(),
-		OSName:     GetOSName(),
-		MemSize:    GetMemSize(),
-		MemUsed:    GetMemUsed(),
-		NumProcess: GetNumProcess(),
-
-		DiskName:  GetDiskName(),
-		DiskUsage: GetDiskUsage(),
-		DiskSize:  GetDiskSize(),
-		Uptime:    GetUptime(),
-		IORead:    iorw[0],
-		IOWrite:   iorw[1],
-	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-	return string(jsonData)
-}
 
 func GetDeviceID() string {
 	id, err := host.HostID()
@@ -101,12 +30,12 @@ func GetCPUModel() string {
 	return cpuInfo[0].ModelName
 }
 
-func GetCPUNum() int64 {
+func GetCPUNum() string {
 	cpuNum, err := cpu.Counts(true)
 	if err != nil {
-		return -1
+		return "-1"
 	}
-	return int64(cpuNum)
+	return fmt.Sprintf("%d", cpuNum)
 }
 
 func GetCPUFreq() string {
@@ -114,22 +43,17 @@ func GetCPUFreq() string {
 	if err != nil {
 		return "-1"
 	}
-	return fmt.Sprintf("%.2f", cpuFreq[0].Mhz/1000)
+	mhz := cpuFreq[0].Mhz
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.2f", mhz))
 }
 
-func GetCPUUsage() int64 {
+func GetCPUUsage() string {
 	percent, err := cpu.Percent(time.Second, false)
 	if err != nil {
-		return -1
+		return "-1"
 	}
-	return int64(percent[0])
-}
-
-func FirstUpper(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	pct := percent[0]
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.2f", pct))
 }
 
 func GetOSName() string {
@@ -151,7 +75,7 @@ func GetOSName() string {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "PRETTY_NAME") {
-			return strings.Split(line, "=")[1]
+			return strings.ReplaceAll(strings.Split(line, "=")[1], "\"", "")
 		}
 	}
 	return "Unknown"
@@ -162,23 +86,24 @@ func GetMemSize() string {
 	if err != nil {
 		return "-1"
 	}
-	return fmt.Sprintf("%d", memInfo.Total/1024/1024/1024)
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.3f", float64(memInfo.Total)/1024/1024/1024))
 }
 
-func GetMemUsed() int64 {
+func GetMemUsed() string {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
-		return -1
+		return "-1"
 	}
-	return int64(memInfo.UsedPercent)
+	pct := memInfo.UsedPercent
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.2f", pct))
 }
 
-func GetNumProcess() int64 {
+func GetNumProcess() string {
 	processes, err := process.Processes()
 	if err != nil {
-		return -1
+		return "-1"
 	}
-	return int64(len(processes))
+	return fmt.Sprintf("%d", len(processes))
 }
 
 func GetDiskName() string {
@@ -193,18 +118,23 @@ func GetDiskName() string {
 			if nameerr != nil {
 				return "Unknown Disk (" + devicePath + ")"
 			}
-			return name + " (" + devicePath + ")"
+			if name != "" {
+				return name + " (" + devicePath + ")"
+			} else {
+				return "No Label (" + devicePath + ")"
+			}
 		}
 	}
 	return "Unknown"
 }
 
-func GetDiskUsage() int64 {
+func GetDiskUsage() string {
 	disks, err := disk.Usage("/")
 	if err != nil {
-		return -1
+		return "-1"
 	}
-	return int64(disks.UsedPercent)
+	pct := disks.UsedPercent
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.2f", pct))
 }
 
 func GetDiskSize() string {
@@ -212,13 +142,14 @@ func GetDiskSize() string {
 	if err != nil {
 		return "-1"
 	}
-	return fmt.Sprintf("%.2f", float64(disks.Total/1024/1024/1024))
+	total := float64(disks.Total) / 1024 / 1024 / 1024
+	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.3f", total))
 }
 
 func GetUptime() string {
 	uptime, err := host.Uptime()
 	if err != nil {
-		return "-1"
+		return "0D0H0M0S"
 	}
 	day := uptime / 86400
 	hour := uptime % 86400 / 3600
@@ -227,10 +158,11 @@ func GetUptime() string {
 	return fmt.Sprintf("%dD%dH%dM%dS", day, hour, minute, second)
 }
 
-func GetIORW() []int64 {
+func GetIORW() []string {
+	defaultVal := []string{"-1", "-1"}
 	disks, err := disk.Partitions(false)
 	if err != nil {
-		return []int64{-1, -1}
+		return defaultVal
 	}
 	for _, mainDisk := range disks {
 		if mainDisk.Mountpoint == "/" {
@@ -238,18 +170,22 @@ func GetIORW() []int64 {
 			deviceBase := filepath.Base(devicePath)
 			io0, ioerr0 := disk.IOCounters(devicePath)
 			if ioerr0 != nil {
-				return []int64{-1, -1}
+				return defaultVal
 			}
 			time.Sleep(time.Second)
 			io1, ioerr1 := disk.IOCounters(devicePath)
 			if ioerr1 != nil {
-				return []int64{-1, -1}
+				return defaultVal
 			}
 			read := io1[deviceBase].ReadBytes - io0[deviceBase].ReadBytes
 			write := io1[deviceBase].WriteBytes - io0[deviceBase].WriteBytes
-			return []int64{int64(read), int64(write)}
+			read = read / 1024
+			readStr := removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.3f", float64(read)))
+			write = write / 1024
+			writeStr := removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.3f", float64(write)))
+			return []string{readStr, writeStr}
 
 		}
 	}
-	return []int64{-1, -1}
+	return defaultVal
 }
