@@ -9,7 +9,9 @@ import (
 
 func signData(key string, data MonitorData) string {
 	dataToBeSign := httpBuildQuery(data) + key
-	println(dataToBeSign)
+	if debug == "true" {
+		println(dataToBeSign)
+	}
 	sign := strings.ToUpper(fmt.Sprintf("%x", sha512.Sum512([]byte(dataToBeSign))))
 	return sign
 }

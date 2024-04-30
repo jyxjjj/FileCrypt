@@ -2,22 +2,39 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 )
 
-func main() {
-	surl := os.Getenv("SERVER_URL")
+var surl, key, debug string
+
+func init() {
+	flag.StringVar(&surl, "s", "", "Server URL")
+	flag.StringVar(&key, "k", "", "Sign Key")
+	flag.StringVar(&debug, "d", "false", "Debug mode")
+	flag.Parse()
+
 	if surl == "" {
-		panic("SERVER_URL has not been set")
+		surl = os.Getenv("SERVER_URL")
+		if surl == "" {
+			panic("SERVER_URL has not been set")
+		}
 	}
-	key := os.Getenv("SIGN_KEY")
 	if key == "" {
-		panic("SIGN_KEY has not been set")
+		key = os.Getenv("SIGN_KEY")
+		if key == "" {
+			panic("SIGN_KEY has not been set")
+		}
 	}
-	debug := os.Getenv("DEBUG")
-	if key == "" {
-		debug = "false"
+	if debug == "false" || debug == "" {
+		debug = os.Getenv("DEBUG")
+		if debug == "false" || debug == "" {
+			debug = "false"
+		}
 	}
+}
+
+func main() {
 	data := run()
 	data.Timestamp = getTimestamp(data.DeviceID)
 	sign := signData(key, data)

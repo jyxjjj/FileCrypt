@@ -43,7 +43,7 @@ func GetCPUFreq() string {
 	if err != nil {
 		return "-1"
 	}
-	mhz := cpuFreq[0].Mhz
+	mhz := cpuFreq[0].Mhz / 1000
 	return removeAllRightZeroAndPointForFloatString(fmt.Sprintf("%.2f", mhz))
 }
 
