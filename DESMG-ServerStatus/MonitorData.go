@@ -16,5 +16,5 @@ type MonitorData struct {
 	Uptime     string `json:"Uptime"`
 	IORead     string `json:"IORead"`
 	IOWrite    string `json:"IOWrite"`
-	Timestamp  string `json:"Timestamp"`
+	Timestamp  string `json:"timestamp"`
 }
